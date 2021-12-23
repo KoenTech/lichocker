@@ -19,16 +19,20 @@
 
 # Global variables
 SDKMAN_SERVICE="https://api.sdkman.io/2"
-SDKMAN_VERSION="5.7.4+362"
+SDKMAN_VERSION="5.12.2"
 SDKMAN_PLATFORM=$(uname)
 
 if [ -z "$SDKMAN_DIR" ]; then
     SDKMAN_DIR="$HOME/.sdkman"
+    SDKMAN_DIR_RAW='$HOME/.sdkman'
+else
+    SDKMAN_DIR_RAW="$SDKMAN_DIR"
 fi
 
 # Local variables
 sdkman_bin_folder="${SDKMAN_DIR}/bin"
 sdkman_src_folder="${SDKMAN_DIR}/src"
+sdkman_contrib_folder=${SDKMAN_DIR}/contrib
 sdkman_tmp_folder="${SDKMAN_DIR}/tmp"
 sdkman_stage_folder="${sdkman_tmp_folder}/stage"
 sdkman_zip_file="${sdkman_tmp_folder}/sdkman-${SDKMAN_VERSION}.zip"
@@ -41,12 +45,12 @@ sdkman_config_file="${sdkman_etc_folder}/config"
 sdkman_bash_profile="${HOME}/.bash_profile"
 sdkman_profile="${HOME}/.profile"
 sdkman_bashrc="${HOME}/.bashrc"
-sdkman_zshrc="${HOME}/.zshrc"
+sdkman_zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
 
 sdkman_init_snippet=$( cat << EOF
 #THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
-export SDKMAN_DIR="$SDKMAN_DIR"
-[[ -s "${SDKMAN_DIR}/bin/sdkman-init.sh" ]] && source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+export SDKMAN_DIR="$SDKMAN_DIR_RAW"
+[[ -s "${SDKMAN_DIR_RAW}/bin/sdkman-init.sh" ]] && source "${SDKMAN_DIR_RAW}/bin/sdkman-init.sh"
 EOF
 )
 
@@ -136,7 +140,7 @@ if [ -d "$SDKMAN_DIR" ]; then
 fi
 
 echo "Looking for unzip..."
-if [ -z $(which unzip) ]; then
+if ! command -v unzip > /dev/null; then
 	echo "Not found."
 	echo "======================================================================================================"
 	echo " Please install unzip on your system using your favourite package manager."
@@ -148,7 +152,7 @@ if [ -z $(which unzip) ]; then
 fi
 
 echo "Looking for zip..."
-if [ -z $(which zip) ]; then
+if ! command -v zip > /dev/null; then
 	echo "Not found."
 	echo "======================================================================================================"
 	echo " Please install zip on your system using your favourite package manager."
@@ -160,7 +164,7 @@ if [ -z $(which zip) ]; then
 fi
 
 echo "Looking for curl..."
-if [ -z $(which curl) ]; then
+if ! command -v curl > /dev/null; then
 	echo "Not found."
 	echo ""
 	echo "======================================================================================================"
@@ -189,7 +193,7 @@ if [[ "$solaris" == true ]]; then
 	fi
 else
 	echo "Looking for sed..."
-	if [ -z $(which sed) ]; then
+	if [ -z $(command -v sed) ]; then
 		echo "Not found."
 		echo ""
 		echo "======================================================================================================"
@@ -211,6 +215,7 @@ echo "Installing SDKMAN scripts..."
 echo "Create distribution directories..."
 mkdir -p "$sdkman_bin_folder"
 mkdir -p "$sdkman_src_folder"
+mkdir -p "$sdkman_contrib_folder"
 mkdir -p "$sdkman_tmp_folder"
 mkdir -p "$sdkman_stage_folder"
 mkdir -p "$sdkman_ext_folder"
@@ -226,13 +231,21 @@ echo "$SDKMAN_CANDIDATES_CSV" > "${SDKMAN_DIR}/var/candidates"
 echo "Prime the config file..."
 touch "$sdkman_config_file"
 echo "sdkman_auto_answer=false" >> "$sdkman_config_file"
-echo "sdkman_auto_selfupdate=false" >> "$sdkman_config_file"
+echo "sdkman_selfupdate_enable=true" >> "$sdkman_config_file"
 echo "sdkman_insecure_ssl=false" >> "$sdkman_config_file"
 echo "sdkman_curl_connect_timeout=7" >> "$sdkman_config_file"
 echo "sdkman_curl_max_time=10" >> "$sdkman_config_file"
 echo "sdkman_beta_channel=false" >> "$sdkman_config_file"
 echo "sdkman_debug_mode=false" >> "$sdkman_config_file"
 echo "sdkman_colour_enable=true" >> "$sdkman_config_file"
+echo "sdkman_auto_env=false" >> "$sdkman_config_file"
+echo "sdkman_rosetta2_compatible=true" >> "$sdkman_config_file"
+
+if [ -z "$ZSH_VERSION" -a -z "$BASH_VERSION" ]; then
+    echo "sdkman_auto_complete=false" >> "$sdkman_config_file"
+else
+    echo "sdkman_auto_complete=true" >> "$sdkman_config_file"
+fi
 
 echo "Download script archive..."
 curl --location --progress-bar "${SDKMAN_SERVICE}/broker/download/sdkman/install/${SDKMAN_VERSION}/${SDKMAN_PLATFORM}" > "$sdkman_zip_file"
@@ -258,8 +271,11 @@ unzip -qo "$sdkman_zip_file" -d "$sdkman_stage_folder"
 
 
 echo "Install scripts..."
-mv "${sdkman_stage_folder}/sdkman-init.sh" "$sdkman_bin_folder"
-mv "$sdkman_stage_folder"/sdkman-* "$sdkman_src_folder"
+mv -f "${sdkman_stage_folder}/sdkman-init.sh" "$sdkman_bin_folder"
+mv -f "$sdkman_stage_folder"/sdkman-* "$sdkman_src_folder"
+
+echo "Install contributed software..."
+mv -vf "$sdkman_stage_folder/contrib/completion" "$sdkman_contrib_folder"
 
 echo "Set version to $SDKMAN_VERSION ..."
 echo "$SDKMAN_VERSION" > "${SDKMAN_DIR}/var/version"
@@ -287,6 +303,7 @@ if [[ -z $(grep 'sdkman-init.sh' "$sdkman_zshrc") ]]; then
     echo -e "\n$sdkman_init_snippet" >> "$sdkman_zshrc"
     echo "Updated existing ${sdkman_zshrc}"
 fi
+
 
 echo -e "\n\n\nAll done!\n\n"
 
